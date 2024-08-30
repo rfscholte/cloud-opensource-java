@@ -16,53 +16,46 @@
 
 package com.google.cloud.tools.dependencies.linkagemonitor;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static java.util.Map.entry;
+
 public class HttpUtilTest {
 
-  @SuppressWarnings("serial")
-  private static final Map<String, String> RANDOM_PARAMETERS = Collections.unmodifiableMap(
-      new HashMap<String, String>() {
-        {
-          put("v", "1");
-          put("tid", "UA-12345678-1");
-          put("ni", "0");
-          put("t", "pageview");
-          put("cd21", "1");
-          put("cd16", "0");
-          put("cd17", "0");
-          put("cid", "bee5d838-c3f8-4940-a944-b56973597e74");
-          put("cd19", "some-event-type");
-          put("cd20", "some-event-name");
-          put("dh", "virtual.host");
-          put("dp", "/virtual/some-event-type/some-event-name");
-          put("dt", "some-custom-key=some-custom-value");
-        }
-      });
+  private static final Map<String, String> RANDOM_PARAMETERS = Map.ofEntries(
+	  entry("v", "1"),
+	  entry("tid", "UA-12345678-1"),
+	  entry("ni", "0"),
+	  entry("t", "pageview"),
+	  entry("cd21", "1"),
+	  entry("cd16", "0"),
+	  entry("cd17", "0"),
+	  entry("cid", "bee5d838-c3f8-4940-a944-b56973597e74"),
+	  entry("cd19", "some-event-type"),
+      entry("cd20", "some-event-name"),
+      entry("dh", "virtual.host"),
+      entry("dp", "/virtual/some-event-type/some-event-name"),
+      entry("dt", "some-custom-key=some-custom-value")
+  );
 
-  @SuppressWarnings("serial")
-  private static final Map<String, String> ENCODED_PARAMETERS = Collections.unmodifiableMap(
-      new HashMap<String, String>() {
-        {
-          put("dt", "some-custom-key%3Dsome-custom-value");
-          put("cd16", "0");
-          put("cd17", "0");
-          put("v", "1");
-          put("t", "pageview");
-          put("cd21", "1");
-          put("cd20", "some-event-name");
-          put("ni", "0");
-          put("tid", "UA-12345678-1");
-          put("dh", "virtual.host");
-          put("dp", "%2Fvirtual%2Fsome-event-type%2Fsome-event-name");
-          put("cid", "bee5d838-c3f8-4940-a944-b56973597e74");
-          put("cd19", "some-event-type");
-        }
-      });
+  private static final Map<String, String> ENCODED_PARAMETERS = Map.ofEntries(
+		entry("dt", "some-custom-key%3Dsome-custom-value"),
+		entry("cd16", "0"),
+		entry("cd17", "0"),
+		entry("v", "1"),
+		entry("t", "pageview"),
+		entry("cd21", "1"),
+		entry("cd20", "some-event-name"),
+		entry("ni", "0"),
+		entry("tid", "UA-12345678-1"),
+		entry("dh", "virtual.host"),
+		entry("dp", "%2Fvirtual%2Fsome-event-type%2Fsome-event-name"),
+		entry("cid", "bee5d838-c3f8-4940-a944-b56973597e74"),
+		entry("cd19", "some-event-type")
+  );
 
   @Test
   public void testGetParametersString() {
