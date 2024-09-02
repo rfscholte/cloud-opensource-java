@@ -125,7 +125,7 @@ public class LinkageMonitorTest {
   public void testBomSnapshot()
       throws ModelBuildingException, ArtifactResolutionException, ArtifactDescriptorException {
 
-    Bom bom = Bom.readBom("com.google.cloud:libraries-bom:1.2.0");
+    Bom bom = Bom.readBom(RepositoryUtility.newRepositorySystem(), "com.google.cloud:libraries-bom:1.2.0");
     Bom snapshotBom =
         LinkageMonitor.copyWithSnapshot(
             system,

@@ -68,8 +68,7 @@ public final class Bom {
     return coordinates;
   }
 
-  public static Bom readBom(Path pomFile) throws MavenRepositoryException {
-    RepositorySystem system = RepositoryUtility.newRepositorySystem();
+  public static Bom readBom(RepositorySystem system, Path pomFile) throws MavenRepositoryException {
     RepositorySystemSession session = RepositoryUtility.newSession(system);
   
     MavenProject mavenProject = RepositoryUtility.createMavenProject(pomFile, session);
@@ -95,11 +94,10 @@ public final class Bom {
    *
    * @param mavenRepositoryUrls URLs of Maven repositories to search for BOM members
    */
-  public static Bom readBom(String coordinates, List<String> mavenRepositoryUrls)
+  public static Bom readBom(RepositorySystem system, String coordinates, List<String> mavenRepositoryUrls)
       throws ArtifactDescriptorException {
     Artifact artifact = new DefaultArtifact(coordinates);
   
-    RepositorySystem system = RepositoryUtility.newRepositorySystem();
     RepositorySystemSession session = RepositoryUtility.newSession(system);
   
     ArtifactDescriptorRequest request = new ArtifactDescriptorRequest();
@@ -132,8 +130,8 @@ public final class Bom {
    * Parses the dependencyManagement section of an artifact and returns the artifacts
    * included there.
    */
-  public static Bom readBom(String coordinates) throws ArtifactDescriptorException {
-    return Bom.readBom(coordinates, ImmutableList.of(RepositoryUtility.CENTRAL.getUrl()));
+  public static Bom readBom(RepositorySystem system, String coordinates) throws ArtifactDescriptorException {
+    return Bom.readBom(system, coordinates, ImmutableList.of(RepositoryUtility.CENTRAL.getUrl()));
   }
 
   /** Returns true if the {@code artifact} in BOM should be skipped for checks. */

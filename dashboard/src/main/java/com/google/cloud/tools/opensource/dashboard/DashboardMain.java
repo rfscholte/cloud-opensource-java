@@ -90,6 +90,7 @@ public class DashboardMain {
 
   private static final Configuration freemarkerConfiguration = configureFreemarker();
 
+  private static final RepositorySystem repositorySystem = RepositoryUtility.newRepositorySystem();
   private static final DependencyGraphBuilder dependencyGraphBuilder = new DependencyGraphBuilder();
   private static final ClassPathBuilder classPathBuilder =
       new ClassPathBuilder(dependencyGraphBuilder);
@@ -131,7 +132,6 @@ public class DashboardMain {
     String groupId = elements.get(0);
     String artifactId = elements.get(1);
 
-    RepositorySystem repositorySystem = RepositoryUtility.newRepositorySystem();
     // The highest version comes last.
     ImmutableList<String> versions =
         RepositoryUtility.findVersions(repositorySystem, groupId, artifactId);
@@ -174,7 +174,7 @@ public class DashboardMain {
   static Path generate(
       String bomCoordinates, DependencyMediationAlgorithm dependencyMediationAlgorithm)
       throws IOException, TemplateException, RepositoryException, URISyntaxException {
-    Path output = generate(Bom.readBom(bomCoordinates), dependencyMediationAlgorithm);
+    Path output = generate(Bom.readBom(repositorySystem, bomCoordinates), dependencyMediationAlgorithm);
     System.out.println("Wrote dashboard for " + bomCoordinates + " to " + output);
     return output;
   }
@@ -185,7 +185,7 @@ public class DashboardMain {
       InvalidVersionSpecificationException {
     checkArgument(Files.isRegularFile(bomFile), "The input BOM %s is not a regular file", bomFile);
     checkArgument(Files.isReadable(bomFile), "The input BOM %s is not readable", bomFile);
-    Path output = generate(Bom.readBom(bomFile), dependencyMediationAlgorithm);
+    Path output = generate(Bom.readBom(repositorySystem, bomFile), dependencyMediationAlgorithm);
     System.out.println("Wrote dashboard for " + bomFile + " to " + output);
     return output;
   }

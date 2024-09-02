@@ -20,6 +20,7 @@ import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import com.google.cloud.tools.opensource.dependencies.ArtifactProblem;
 import com.google.cloud.tools.opensource.dependencies.DependencyGraphBuilder;
+import com.google.cloud.tools.opensource.dependencies.RepositoryUtility;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
@@ -28,6 +29,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.transform.TransformerException;
 import org.apache.commons.cli.ParseException;
 import org.eclipse.aether.RepositoryException;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.artifact.Artifact;
 
 /**
@@ -148,8 +150,9 @@ class LinkageCheckerMain {
     ImmutableList<Artifact> artifacts = linkageCheckerArguments.getArtifacts();
 
     // When a BOM or Maven artifacts are passed as arguments, resolve the dependencies.
+    RepositorySystem repoSystem = RepositoryUtility.newRepositorySystem();
     DependencyGraphBuilder dependencyGraphBuilder =
-        new DependencyGraphBuilder(linkageCheckerArguments.getMavenRepositoryUrls());
+        new DependencyGraphBuilder(repoSystem, linkageCheckerArguments.getMavenRepositoryUrls());
     ClassPathBuilder classPathBuilder = new ClassPathBuilder(dependencyGraphBuilder);
     ClassPathResult classPathResult =
         classPathBuilder.resolve(artifacts, false, DependencyMediation.MAVEN);

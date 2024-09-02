@@ -170,7 +170,7 @@ public class DependencyGraphIntegrationTest {
     }
 
     DependencyGraphBuilder graphBuilder =
-        new DependencyGraphBuilder(
+        new DependencyGraphBuilder(RepositoryUtility.newRepositorySystem(),
             ImmutableList.of(
                 "https://repo.spring.io/milestone", "https://repo.maven.apache.org/maven2"));
 

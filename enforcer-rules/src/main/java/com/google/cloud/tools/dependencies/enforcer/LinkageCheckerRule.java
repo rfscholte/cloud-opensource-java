@@ -40,32 +40,36 @@ import com.google.cloud.tools.opensource.dependencies.UnresolvableArtifactProble
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nonnull;
+import javax.inject.Inject;
+import javax.inject.Named;
+
 import org.apache.maven.RepositoryUtils;
+import org.apache.maven.enforcer.rule.api.AbstractEnforcerRule;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleException;
-import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecution;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.plugins.enforcer.AbstractNonCacheableEnforcerRule;
 import org.apache.maven.project.DefaultDependencyResolutionRequest;
 import org.apache.maven.project.DependencyResolutionException;
 import org.apache.maven.project.DependencyResolutionRequest;
 import org.apache.maven.project.DependencyResolutionResult;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectDependenciesResolver;
-import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
-import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
 import org.eclipse.aether.DefaultRepositoryCache;
 import org.eclipse.aether.DefaultRepositorySystemSession;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.ArtifactTypeRegistry;
@@ -79,7 +83,8 @@ import org.eclipse.aether.util.graph.selector.OptionalDependencySelector;
 import org.eclipse.aether.version.InvalidVersionSpecificationException;
 
 /** Linkage Checker Maven Enforcer Rule. */
-public class LinkageCheckerRule extends AbstractNonCacheableEnforcerRule {
+@Named("linkageCheckerRule")
+public class LinkageCheckerRule extends AbstractEnforcerRule {
 
   /**
    * Maven packaging values known to be irrelevant to Linkage Check for non-BOM project.
@@ -133,139 +138,149 @@ public class LinkageCheckerRule extends AbstractNonCacheableEnforcerRule {
     this.exclusionFile = exclusionFile;
   }
 
-  private static Log logger;
+  private final MavenProject project;
+  private final MavenSession session;
+  private final MojoExecution execution;
+  
+  private final ProjectDependenciesResolver projectDependenciesResolver;
+  
+  private final RepositorySystem repoSystem;
+
+  @Inject
+  public LinkageCheckerRule(MavenProject project, MavenSession session, MojoExecution execution, ProjectDependenciesResolver projectDependenciesResolver, RepositorySystem repoSystem) {
+	this.project = project;
+	this.session = session;
+	this.execution = execution;
+	this.projectDependenciesResolver = projectDependenciesResolver;
+	this.repoSystem = repoSystem;
+  }
 
   @Override
-  public void execute(@Nonnull EnforcerRuleHelper helper) throws EnforcerRuleException {
-    logger = helper.getLog();
-
-    try {
-      MavenProject project = (MavenProject) helper.evaluate("${project}");
-      MavenSession session = (MavenSession) helper.evaluate("${session}");
-      MojoExecution execution = (MojoExecution) helper.evaluate("${mojoExecution}");
-      RepositorySystemSession repositorySystemSession = session.getRepositorySession();
-
-      ImmutableList<String> repositoryUrls =
-          project.getRemoteProjectRepositories().stream()
-              .map(RemoteRepository::getUrl)
-              .collect(toImmutableList());
-      DependencyGraphBuilder dependencyGraphBuilder = new DependencyGraphBuilder(repositoryUrls);
-      classPathBuilder = new ClassPathBuilder(dependencyGraphBuilder);
-
-      boolean readingDependencyManagementSection =
-          dependencySection == DependencySection.DEPENDENCY_MANAGEMENT;
-      if (readingDependencyManagementSection
-          && (project.getDependencyManagement() == null
-              || project.getDependencyManagement().getDependencies() == null
-              || project.getDependencyManagement().getDependencies().isEmpty())) {
-        logger.warn("The rule is set to read dependency management section but it is empty.");
-      }
-
-      String projectType = project.getArtifact().getType();
-      if (readingDependencyManagementSection) {
-        if (!"pom".equals(projectType)) {
-          logger.warn("A BOM should have packaging pom");
-          return;
-        }
-      } else {
-        if (UNSUPPORTED_NONBOM_PACKAGING.contains(projectType)) {
-          return;
-        }
-        if (!"verify".equals(execution.getLifecyclePhase())) {
-          throw new EnforcerRuleException(
-              "To run the check on the compiled class files, the linkage checker enforcer rule"
-                  + " should be bound to the 'verify' phase. Current phase: "
-                  + execution.getLifecyclePhase());
-        }
-        if (project.getArtifact().getFile() == null) {
-          // Skipping projects without a file, such as Guava's guava-tests module.
-          // https://github.com/GoogleCloudPlatform/cloud-opensource-java/issues/850
-          return;
-        }
-      }
-
-      ClassPathResult classPathResult =
-          readingDependencyManagementSection
-              ? findBomClasspath(project, repositorySystemSession)
-              : findProjectClasspath(project, repositorySystemSession, helper);
-      ImmutableList<ClassPathEntry> classPath = classPathResult.getClassPath();
-      if (classPath.isEmpty()) {
-        logger.warn("Class path is empty.");
-        return;
-      }
-
-      List<ClassPathEntry> entryPoints = entryPoints(project, classPath);
-
-      try {
-
-        // TODO LinkageChecker.create and LinkageChecker.findLinkageProblems
-        // should not be two separate public methods since we always call
-        // findLinkageProblems immediately after create.
-
-        Path exclusionFile = this.exclusionFile == null ? null : Paths.get(this.exclusionFile);
-        LinkageChecker linkageChecker =
-            LinkageChecker.create(classPath, entryPoints, exclusionFile);
-        ImmutableSet<LinkageProblem> linkageProblems = linkageChecker.findLinkageProblems();
-        if (reportOnlyReachable) {
-          ClassReferenceGraph classReferenceGraph = linkageChecker.getClassReferenceGraph();
-          linkageProblems =
-              linkageProblems.stream()
-                  .filter(
-                      entry ->
-                          classReferenceGraph.isReachable(entry.getSourceClass().getBinaryName()))
-                  .collect(toImmutableSet());
-        }
-
-        if (classPathResult != null) {
-          LinkageProblemCauseAnnotator.annotate(classPathBuilder, classPathResult, linkageProblems);
-        }
-
-        // Count unique LinkageProblems by their symbols
-        long errorCount =
-            linkageProblems.stream().map(LinkageProblem::formatSymbolProblem).distinct().count();
-
-        String foundError = reportOnlyReachable ? "reachable error" : "error";
-        if (errorCount > 1) {
-          foundError += "s";
-        }
-        if (errorCount > 0) {
-          String message =
-              String.format(
-                  "Linkage Checker rule found %d %s:\n%s",
-                  errorCount,
-                  foundError,
-                  LinkageProblem.formatLinkageProblems(linkageProblems, classPathResult));
-          if (getLevel() == WARN) {
-            logger.warn(message);
-          } else {
-            logger.error(message);
-            logger.info(
-                "For the details of the linkage errors, see "
-                    + "https://github.com/GoogleCloudPlatform/cloud-opensource-java/wiki/Linkage-Checker-Messages");
-            throw new EnforcerRuleException(
-                "Failed while checking class path. See above error report.");
-          }
-        } else {
-          // arguably shouldn't log anything on success
-          logger.info("No " + foundError + " found");
-        }
-      } catch (IOException ex) {
-        // Maven's "-e" flag does not work for EnforcerRuleException. Print stack trace here.
-        logger.warn("Failed to run Linkage Checker:" + ex.getMessage(), ex);
-        throw new EnforcerRuleException("Failed to run Linkage Checker", ex);
-      }
-    } catch (ExpressionEvaluationException ex) {
-      throw new EnforcerRuleException("Unable to lookup an expression " + ex.getMessage(), ex);
-    }
+  public void execute() throws EnforcerRuleException {
+	  RepositorySystemSession repositorySystemSession = session.getRepositorySession();
+	
+	  ImmutableList<String> repositoryUrls =
+	      project.getRemoteProjectRepositories().stream()
+	          .map(RemoteRepository::getUrl)
+	          .collect(toImmutableList());
+	  DependencyGraphBuilder dependencyGraphBuilder = new DependencyGraphBuilder(repoSystem, repositoryUrls);
+	  classPathBuilder = new ClassPathBuilder(dependencyGraphBuilder);
+	
+	  boolean readingDependencyManagementSection =
+	      dependencySection == DependencySection.DEPENDENCY_MANAGEMENT;
+	  if (readingDependencyManagementSection
+	      && (project.getDependencyManagement() == null
+	          || project.getDependencyManagement().getDependencies() == null
+	          || project.getDependencyManagement().getDependencies().isEmpty())) {
+	    getLog().warn("The rule is set to read dependency management section but it is empty.");
+	  }
+	
+	  String projectType = project.getArtifact().getType();
+	  if (readingDependencyManagementSection) {
+	    if (!"pom".equals(projectType)) {
+	      getLog().warn("A BOM should have packaging pom");
+	      return;
+	    }
+	  } else {
+	    if (UNSUPPORTED_NONBOM_PACKAGING.contains(projectType)) {
+	      return;
+	    }
+	    if (!"verify".equals(execution.getLifecyclePhase())) {
+	      throw new EnforcerRuleException(
+	          "To run the check on the compiled class files, the linkage checker enforcer rule"
+	              + " should be bound to the 'verify' phase. Current phase: "
+	              + execution.getLifecyclePhase());
+	    }
+	    if (project.getArtifact().getFile() == null) {
+	      // Skipping projects without a file, such as Guava's guava-tests module.
+	      // https://github.com/GoogleCloudPlatform/cloud-opensource-java/issues/850
+	      return;
+	    }
+	  }
+	
+	  ClassPathResult classPathResult =
+	      readingDependencyManagementSection
+	          ? findBomClasspath(project, repositorySystemSession)
+	          : findProjectClasspath(project, repositorySystemSession);
+	  ImmutableList<ClassPathEntry> classPath = classPathResult.getClassPath();
+	  if (classPath.isEmpty()) {
+		  getLog().warn("Class path is empty.");
+	    return;
+	  }
+	
+	  List<ClassPathEntry> entryPoints = entryPoints(project, classPath);
+	
+	  try {
+	
+	    // TODO LinkageChecker.create and LinkageChecker.findLinkageProblems
+	    // should not be two separate public methods since we always call
+	    // findLinkageProblems immediately after create.
+	
+	    Path exclusionFile = this.exclusionFile == null ? null : Paths.get(this.exclusionFile);
+	    LinkageChecker linkageChecker =
+	        LinkageChecker.create(classPath, entryPoints, exclusionFile);
+	    ImmutableSet<LinkageProblem> linkageProblems = linkageChecker.findLinkageProblems();
+	    if (reportOnlyReachable) {
+	      ClassReferenceGraph classReferenceGraph = linkageChecker.getClassReferenceGraph();
+	      linkageProblems =
+	          linkageProblems.stream()
+	              .filter(
+	                  entry ->
+	                      classReferenceGraph.isReachable(entry.getSourceClass().getBinaryName()))
+	              .collect(toImmutableSet());
+	    }
+	
+	    if (classPathResult != null) {
+	      LinkageProblemCauseAnnotator.annotate(classPathBuilder, classPathResult, linkageProblems);
+	    }
+	
+	    // Count unique LinkageProblems by their symbols
+	    long errorCount =
+	        linkageProblems.stream().map(LinkageProblem::formatSymbolProblem).distinct().count();
+	
+	    String foundError = reportOnlyReachable ? "reachable error" : "error";
+	    if (errorCount > 1) {
+	      foundError += "s";
+	    }
+	    if (errorCount > 0) {
+	      String message =
+	          String.format(
+	              "Linkage Checker rule found %d %s:\n%s",
+	              errorCount,
+	              foundError,
+	              LinkageProblem.formatLinkageProblems(linkageProblems, classPathResult));
+	      if (getLevel() == WARN) {
+	    	  getLog().warn(message);
+	      } else {
+	    	  getLog().error(message);
+	    	  getLog().info(
+	            "For the details of the linkage errors, see "
+	                + "https://github.com/GoogleCloudPlatform/cloud-opensource-java/wiki/Linkage-Checker-Messages");
+	        throw new EnforcerRuleException(
+	            "Failed while checking class path. See above error report.");
+	      }
+	    } else {
+	      // arguably shouldn't log anything on success
+	    	getLog().info("No " + foundError + " found");
+	    }
+	  } catch (IOException ex) {
+		  try(StringWriter sw = new StringWriter();
+			  PrintWriter pw = new PrintWriter(sw)) {
+			  pw.println();
+			  ex.printStackTrace(pw);
+     	      getLog().warn("Failed to run Linkage Checker:" + ex.getMessage() + sw);
+		  } catch (IOException e) {
+			  // autoclose of sw failed, ignore
+		  }
+	    throw new EnforcerRuleException("Failed to run Linkage Checker", ex);
+	  }
   }
 
   /** Builds a class path for {@code mavenProject}. */
-  private static ClassPathResult findProjectClasspath(
-      MavenProject mavenProject, RepositorySystemSession session, EnforcerRuleHelper helper)
+  private ClassPathResult findProjectClasspath(
+      MavenProject mavenProject, RepositorySystemSession session)
       throws EnforcerRuleException {
     try {
-      ProjectDependenciesResolver projectDependenciesResolver =
-          helper.getComponent(ProjectDependenciesResolver.class);
       DefaultRepositorySystemSession fullDependencyResolutionSession =
           new DefaultRepositorySystemSession(session);
 
@@ -293,15 +308,13 @@ public class LinkageCheckerRule extends AbstractNonCacheableEnforcerRule {
           projectDependenciesResolver.resolve(dependencyResolutionRequest);
 
       return buildClassPathResult(resolutionResult);
-    } catch (ComponentLookupException e) {
-      throw new EnforcerRuleException("Unable to lookup a component " + e.getMessage(), e);
     } catch (DependencyResolutionException e) {
       return buildClasspathFromException(e);
     }
   }
 
   /** Returns class path built from partial dependency graph of {@code resolutionException}. */
-  private static ClassPathResult buildClasspathFromException(
+  private ClassPathResult buildClasspathFromException(
       DependencyResolutionException resolutionException) throws EnforcerRuleException {
     DependencyResolutionResult result = resolutionException.getResult();
 
@@ -316,7 +329,7 @@ public class LinkageCheckerRule extends AbstractNonCacheableEnforcerRule {
         ArtifactTransferException artifactException = (ArtifactTransferException) cause;
         Artifact artifact = artifactException.getArtifact();
         String warning = graph.createUnresolvableArtifactProblem(artifact).toString();
-        logger.warn(warning);
+        getLog().warn(warning);
         break;
       }
     }

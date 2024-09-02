@@ -38,7 +38,9 @@ public class DependencyGraphBuilderIntegrationTest {
       throws IOException {
 
     DependencyGraphBuilder graphBuilder = 
-        new DependencyGraphBuilder(ImmutableList.of("https://dl.google.com/dl/android/maven2"));
+        new DependencyGraphBuilder(
+        		RepositoryUtility.newRepositorySystem(),
+        		ImmutableList.of("https://dl.google.com/dl/android/maven2"));
 
     File localRepository = Files.createTempDirectory(".m2").toFile();
     localRepository.deleteOnExit();

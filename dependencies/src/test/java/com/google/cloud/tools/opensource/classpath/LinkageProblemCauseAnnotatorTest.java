@@ -157,7 +157,7 @@ public class LinkageProblemCauseAnnotatorTest {
   @Test
   public void testAnnotate_dependencyInSpringRepository() throws IOException, RepositoryException {
     DependencyGraphBuilder dependencyGraphBuilder =
-        new DependencyGraphBuilder(
+        new DependencyGraphBuilder(RepositoryUtility.newRepositorySystem(),
             ImmutableList.of(
                 "https://repo.spring.io/milestone", RepositoryUtility.CENTRAL.getUrl()));
 

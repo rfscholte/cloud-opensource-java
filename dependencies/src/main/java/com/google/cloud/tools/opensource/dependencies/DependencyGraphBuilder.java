@@ -44,7 +44,7 @@ import org.eclipse.aether.resolution.DependencyResult;
  */
 public final class DependencyGraphBuilder {
 
-  private static final RepositorySystem system = RepositoryUtility.newRepositorySystem();
+  private final RepositorySystem system;
 
   /** Maven repositories to use when resolving dependencies. */
   private final ImmutableList<RemoteRepository> repositories;
@@ -55,20 +55,21 @@ public final class DependencyGraphBuilder {
   }
 
   public DependencyGraphBuilder() {
-    this(ImmutableList.of(CENTRAL.getUrl()));
+    this(RepositoryUtility.newRepositorySystem(), ImmutableList.of(CENTRAL.getUrl()));
   }
 
   /**
    * @param mavenRepositoryUrls remote Maven repositories to search for dependencies
    * @throws IllegalArgumentException if a URL is malformed or does not have an allowed scheme
    */
-  public DependencyGraphBuilder(Iterable<String> mavenRepositoryUrls) {
+  public DependencyGraphBuilder(RepositorySystem system, Iterable<String> mavenRepositoryUrls) {
     ImmutableList.Builder<RemoteRepository> repositoryListBuilder = ImmutableList.builder();
     for (String mavenRepositoryUrl : mavenRepositoryUrls) {
       RemoteRepository repository = mavenRepositoryFromUrl(mavenRepositoryUrl);
       repositoryListBuilder.add(repository);
     }
     this.repositories = repositoryListBuilder.build();
+    this.system = system;
   }
   
   /**
@@ -116,6 +117,7 @@ public final class DependencyGraphBuilder {
 
     // resolveDependencies equals to calling both collectDependencies (build dependency tree) and
     // resolveArtifacts (download JAR files).
+    
     DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
     return dependencyResult.getRoot();
   }

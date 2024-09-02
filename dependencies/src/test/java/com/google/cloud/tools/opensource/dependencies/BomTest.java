@@ -26,6 +26,8 @@ import com.google.common.truth.Truth;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.List;
+
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.junit.Assert;
@@ -33,9 +35,11 @@ import org.junit.Test;
 
 public class BomTest {
   
+  private final RepositorySystem repoSystem = RepositoryUtility.newRepositorySystem();
+	
   @Test
   public void testReadBom_coordinates() throws ArtifactDescriptorException {
-    Bom bom = Bom.readBom("com.google.cloud:google-cloud-bom:0.61.0-alpha");
+    Bom bom = Bom.readBom(repoSystem, "com.google.cloud:google-cloud-bom:0.61.0-alpha");
     List<Artifact> managedDependencies = bom.getManagedDependencies();
     // Characterization test. As long as the artifact doesn't change (and it shouldn't)
     // the answer won't change.
@@ -49,7 +53,7 @@ public class BomTest {
     // but it exists in Maven central.
     String coordinates = "com.google.cloud:google-cloud-bom:pom:0.32.0-alpha";
     try {
-      Bom.readBom(coordinates, ImmutableList.of("http://nonexistent.example.com"));
+      Bom.readBom(repoSystem, coordinates, ImmutableList.of("http://nonexistent.example.com"));
       fail("readBom should not access Maven Central when it's not in the repository list.");
     } catch (ArtifactDescriptorException ex) {
       assertEquals("Failed to read artifact descriptor for " + coordinates, ex.getMessage());
@@ -60,12 +64,12 @@ public class BomTest {
   public void testReadBom_path()
       throws MavenRepositoryException, ArtifactDescriptorException, URISyntaxException {
     Path pomFile = TestHelper.absolutePathOfResource("libraries-bom-2.7.0.pom");
-    Bom bomFromFile = Bom.readBom(pomFile);
+    Bom bomFromFile = Bom.readBom(repoSystem, pomFile);
     ImmutableList<Artifact> artifactsFromFile = bomFromFile.getManagedDependencies();
 
     // Compare the result with readBom(String coordinates)
     String expectedBomCoordinates = "com.google.cloud:libraries-bom:2.7.0";
-    Bom expectedBom = Bom.readBom(expectedBomCoordinates);
+    Bom expectedBom = Bom.readBom(repoSystem, expectedBomCoordinates);
     ImmutableList<Artifact> expectedArtifacts = expectedBom.getManagedDependencies();
 
     Truth.assertThat(bomFromFile.getCoordinates()).isEqualTo(expectedBomCoordinates);

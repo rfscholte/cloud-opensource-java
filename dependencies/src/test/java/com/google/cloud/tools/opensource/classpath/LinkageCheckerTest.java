@@ -32,6 +32,7 @@ import com.google.cloud.tools.opensource.dependencies.Bom;
 import com.google.cloud.tools.opensource.dependencies.DependencyGraph;
 import com.google.cloud.tools.opensource.dependencies.DependencyGraphBuilder;
 import com.google.cloud.tools.opensource.dependencies.DependencyPath;
+import com.google.cloud.tools.opensource.dependencies.RepositoryUtility;
 import com.google.cloud.tools.opensource.dependencies.UnresolvableArtifactProblem;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -46,6 +47,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 import org.apache.commons.cli.ParseException;
 import org.eclipse.aether.RepositoryException;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
@@ -63,6 +65,8 @@ public class LinkageCheckerTest {
           "has symbol in class with name");
 
   private static DependencyGraphBuilder dependencyGraphBuilder = new DependencyGraphBuilder();
+  
+  private final RepositorySystem repoSystem = RepositoryUtility.newRepositorySystem();
 
   private ClassPathEntry guavaJar;
   private ClassPathEntry firestoreJar;
@@ -1290,7 +1294,7 @@ public class LinkageCheckerTest {
   @Test
   public void testBomHavingClassifierArtifacts() throws Exception {
     String pomFile = "bom-with-classifier-artifacts.pom";
-    Bom bom = Bom.readBom(TestHelper.absolutePathOfResource(pomFile));
+    Bom bom = Bom.readBom(repoSystem, TestHelper.absolutePathOfResource(pomFile));
 
     LinkageChecker linkageChecker = LinkageChecker.create(bom);
     ImmutableSet<LinkageProblem> linkageProblems = linkageChecker.findLinkageProblems();

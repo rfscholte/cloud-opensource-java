@@ -23,6 +23,7 @@ import com.google.cloud.tools.opensource.classpath.DependencyMediation;
 import com.google.cloud.tools.opensource.dependencies.Artifacts;
 import com.google.cloud.tools.opensource.dependencies.Bom;
 import com.google.cloud.tools.opensource.dependencies.DependencyPath;
+import com.google.cloud.tools.opensource.dependencies.RepositoryUtility;
 import com.google.common.base.Joiner;
 import com.google.common.base.Verify;
 import com.google.common.collect.ImmutableList;
@@ -63,7 +64,7 @@ public class BomContentTest {
   }
 
   private void checkBom(Path bomPath) throws Exception {
-    Bom bom = Bom.readBom(bomPath);
+    Bom bom = Bom.readBom(RepositoryUtility.newRepositorySystem(), bomPath);
 
     // Sometimes the artifacts are not yet available in Maven Central and only available in local
     // Maven repository. Use this property in that case.

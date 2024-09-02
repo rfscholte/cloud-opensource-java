@@ -360,7 +360,9 @@ public class DependencyGraphBuilderTest {
     // Previously this test was using https://repo.spring.io/milestone and artifact
     // org.springframework:spring-asm:3.1.0.RC2 but the repository was not stable.
     DependencyGraphBuilder graphBuilder =
-        new DependencyGraphBuilder(ImmutableList.of("https://dl.google.com/dl/android/maven2"));
+        new DependencyGraphBuilder(
+        		RepositoryUtility.newRepositorySystem(),
+        		ImmutableList.of("https://dl.google.com/dl/android/maven2"));
 
     // This artifact does not exist in Maven central, but it is in Android repository
     Artifact artifact = new DefaultArtifact("androidx.lifecycle:lifecycle-common-java8:2.0.0");

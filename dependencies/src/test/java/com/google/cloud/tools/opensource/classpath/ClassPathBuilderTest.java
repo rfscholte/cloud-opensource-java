@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import com.google.cloud.tools.opensource.dependencies.Bom;
+import com.google.cloud.tools.opensource.dependencies.RepositoryUtility;
 import com.google.cloud.tools.opensource.dependencies.UnresolvableArtifactProblem;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.eclipse.aether.RepositoryException;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.version.InvalidVersionSpecificationException;
@@ -40,6 +42,8 @@ import org.junit.Test;
 
 public class ClassPathBuilderTest {
   private ClassPathBuilder classPathBuilder = new ClassPathBuilder();
+  
+  private final RepositorySystem repoSystem = RepositoryUtility.newRepositorySystem();
 
   private ImmutableList<ClassPathEntry> resolveClassPath(String coordinates)
       throws InvalidVersionSpecificationException {
@@ -94,7 +98,7 @@ public class ClassPathBuilderTest {
   @Test
   public void testBomToPaths_firstElementsAreBomMembers() throws RepositoryException {
     List<Artifact> managedDependencies = 
-        Bom.readBom("com.google.cloud:google-cloud-bom:0.81.0-alpha")
+        Bom.readBom(repoSystem, "com.google.cloud:google-cloud-bom:0.81.0-alpha")
         .getManagedDependencies();
 
     ImmutableList<ClassPathEntry> classPath =
@@ -288,7 +292,7 @@ public class ClassPathBuilderTest {
   @Test
   public void testArtifactsWithClassifiers() throws Exception {
     String pomFile = "bom-with-classifier-artifacts.pom";
-    Bom bom = Bom.readBom(TestHelper.absolutePathOfResource(pomFile));
+    Bom bom = Bom.readBom(repoSystem, TestHelper.absolutePathOfResource(pomFile));
     ClassPathResult classPathResult =
         classPathBuilder.resolve(bom.getManagedDependencies(), true, DependencyMediation.MAVEN);
 
