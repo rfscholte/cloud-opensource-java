@@ -172,7 +172,12 @@ public class LinkageCheckerMainIntegrationTest {
       LinkageCheckerMain.main(new String[] {"-b", "com.google.cloud:libraries-bom:1.0.0"});
       fail("LinkageCheckerMain should throw LinkageCheckResultException upon errors");
     } catch (LinkageCheckResultException expected) {
-      assertEquals("Found 758 linkage errors", expected.getMessage());
+    	if(javaMajorVersion < 17) {
+    	      assertEquals("Found 758 linkage errors", expected.getMessage());
+    	}
+    	else {
+  	      assertEquals("Found 768 linkage errors", expected.getMessage());
+    	}
     }
 
     String output = readCapturedStdout();
@@ -199,6 +204,15 @@ public class LinkageCheckerMainIntegrationTest {
             "com.google.appengine:appengine-api-1.0-sdk:1.9.71 is at:\n"
                 + "  com.google.http-client:google-http-client-appengine:1.29.1 (compile) "
                 + "/ com.google.appengine:appengine-api-1.0-sdk:1.9.71 (provided)");
+    
+    if(javaMajorVersion >= 17) {
+    	Truth.assertThat(output)
+        .contains("sun.security.x509.X509CertImpl's method \"void <init>(sun.security.x509.X509CertInfo)\" is not found;\n"
+        		+ "  referenced by 2 class files\n"
+        		+ "    io.grpc.netty.shaded.io.netty.handler.ssl.util.OpenJdkSelfSignedCertGenerator"
+        		+ " (io.grpc:grpc-netty-shaded:1.20.0)");
+        
+    }
   }
 
   @Test

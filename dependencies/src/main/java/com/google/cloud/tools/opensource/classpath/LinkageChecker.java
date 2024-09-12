@@ -26,8 +26,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -55,6 +59,7 @@ public class LinkageChecker {
   private final SymbolReferences symbolReferences;
   private final ClassReferenceGraph classReferenceGraph;
   private final ExcludedErrors excludedErrors;
+  private final Path baselineFile;
 
   @VisibleForTesting
   SymbolReferences getSymbolReferences() {
@@ -69,6 +74,14 @@ public class LinkageChecker {
     return create(classPath, ImmutableSet.copyOf(classPath), null);
   }
 
+  public static LinkageChecker create(
+	      List<ClassPathEntry> classPath,
+	      Iterable<ClassPathEntry> entryPoints,
+	      @Nullable Path exclusionFile) throws IOException
+  {
+	return create(classPath, entryPoints, exclusionFile, null);  
+  }
+  
   /**
    * Returns Linkage Checker for {@code classPath}.
    *
@@ -79,7 +92,8 @@ public class LinkageChecker {
   public static LinkageChecker create(
       List<ClassPathEntry> classPath,
       Iterable<ClassPathEntry> entryPoints,
-      @Nullable Path exclusionFile)
+      @Nullable Path exclusionFile,
+      @Nullable Path baselineFile)
       throws IOException {
     Preconditions.checkArgument(!classPath.isEmpty(), "The linkage classpath is empty.");
     ClassDumper dumper = ClassDumper.create(classPath);
@@ -93,7 +107,8 @@ public class LinkageChecker {
         classPath,
         symbolReferenceMaps,
         classReferenceGraph,
-        ExcludedErrors.create(exclusionFile));
+        ExcludedErrors.create(exclusionFile),
+        baselineFile);
   }
 
   public static LinkageChecker create(Bom bom)
@@ -135,7 +150,7 @@ public class LinkageChecker {
   @VisibleForTesting
   LinkageChecker cloneWith(SymbolReferences newSymbolMaps) {
     return new LinkageChecker(
-        classDumper, classPath, newSymbolMaps, classReferenceGraph, excludedErrors);
+        classDumper, classPath, newSymbolMaps, classReferenceGraph, excludedErrors, baselineFile);
   }
 
   private LinkageChecker(
@@ -143,12 +158,14 @@ public class LinkageChecker {
       List<ClassPathEntry> classPath,
       SymbolReferences symbolReferenceMaps,
       ClassReferenceGraph classReferenceGraph,
-      ExcludedErrors excludedErrors) {
+      ExcludedErrors excludedErrors,
+      Path baselineFile) {
     this.classDumper = Preconditions.checkNotNull(classDumper);
     this.classPath = ImmutableList.copyOf(classPath);
     this.classReferenceGraph = Preconditions.checkNotNull(classReferenceGraph);
     this.symbolReferences = Preconditions.checkNotNull(symbolReferenceMaps);
     this.excludedErrors = Preconditions.checkNotNull(excludedErrors);
+    this.baselineFile = baselineFile;
   }
 
   /**
@@ -228,13 +245,19 @@ public class LinkageChecker {
       }
     }
 
+    ImmutableSet<LinkageProblem> problems = problemToClass.build();
+    
+    if(baselineFile != null) {
+        writeBaseline(problems);
+    }
+    
     // Filter classes in exclusion file
     ImmutableSet<LinkageProblem> filteredMap =
-        problemToClass.build().stream().filter(this::problemFilter).collect(toImmutableSet());
+    		problems.stream().filter(this::problemFilter).collect(toImmutableSet());
     return filteredMap;
   }
 
-  /**
+/**
    * Returns true if the linkage error {@code entry} should be reported. False if it should be
    * suppressed.
    */
@@ -702,5 +725,62 @@ public class LinkageChecker {
       // Missing classes are reported by findLinkageProblem method.
     }
     return builder.build();
+  }
+  
+  private void writeBaseline(ImmutableSet<LinkageProblem> problems) {
+  	try(BufferedWriter out = Files.newBufferedWriter(baselineFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
+  		out.newLine();
+  		out.write("<LinkageCheckerFilter>");
+  		out.newLine();
+  		
+  		for(LinkageProblem lp : problems)
+  		{
+	    		out.write("  <LinkageError>");
+	    		out.newLine();
+
+	    		if(lp.getSourceClass() != null) {
+		    		out.write("    <Source>");
+		    		out.newLine();
+		    		out.write("      <Class name=\""+ lp.getSourceClass().getBinaryName()+"\"/>");
+		    		out.newLine();
+		    		out.write("    </Source>");
+		    		out.newLine();
+	    		}
+
+	    		if(lp.getSymbol() != null) {
+		    		out.write("    <Target>");
+		    		out.newLine();
+		    		if(lp.getSymbol() instanceof ClassSymbol) {
+			    		out.write("      <Class name=\""+ lp.getSymbol().getClassBinaryName()+"\"/>");
+		    		}
+		    		else if(lp.getSymbol() instanceof FieldSymbol) {
+		    			out.write("      <Field className=\""+ lp.getSymbol().getClassBinaryName()+"\" name=\""+ ((FieldSymbol) lp.getSymbol()).getName()+"\"/>");
+		    		}
+		    		else if(lp.getSymbol() instanceof MethodSymbol) {
+			    		out.write("      <Method className=\""+ lp.getSymbol().getClassBinaryName()+"\" name=\""+ ((MethodSymbol) lp.getSymbol()).getName().replace("<", "&lt;").replace(">", "&gt;")+"\"/>");
+		    		}
+		    		else {
+		    			System.err.println("Missing " + lp.getSymbol().toString());
+		    		}
+		    		out.newLine();
+		    		out.write("    </Target>");
+		    		out.newLine();
+	    		}
+
+	    		out.write("    <Reason>");
+	    		out.newLine();
+	    		out.write("      " + lp.formatSymbolProblem().replace("<", "&lt;").replace(">", "&gt;"));
+	    		out.newLine();
+	    		out.write("    </Reason>");
+	    		out.newLine();
+
+	    		out.write("  </LinkageError>");
+	    		out.newLine();
+  		}
+  		out.write("</LinkageCheckerFilter>");
+  		out.newLine();
+  	} catch (IOException e) {
+		e.printStackTrace();
+	}
   }
 }

@@ -316,9 +316,22 @@ public class DashboardTest {
     Assume.assumeTrue(javaMajorVersion >= 11);
 
     Nodes artifactDetailsReports = details.query("//p[@class='jar-linkage-report']");
+    
+    
+   int targetClassesCounter;
+   int sourceClassesCounter;
+    if(javaMajorVersion >= 21) {
+	   targetClassesCounter = 10;
+	   sourceClassesCounter = 10;
+    }
+    else {
+ 	   targetClassesCounter = 5;
+ 	   sourceClassesCounter = 5;
+    }
+    
     // appengine-api-sdk, shown as first item in linkage errors, has these errors
     assertThat(trimAndCollapseWhiteSpace(artifactDetailsReports.get(0).getValue()))
-        .isEqualTo("5 target classes causing linkage errors referenced from 5 source classes.");
+        .isEqualTo(targetClassesCounter + " target classes causing linkage errors referenced from "+sourceClassesCounter+" source classes.");
 
     // The version used in libraries-bom 1.0.0. The google-http-client-appengine has been known to
     // have linkage errors in its dependency appengine-api-1.0-sdk:1.9.71.

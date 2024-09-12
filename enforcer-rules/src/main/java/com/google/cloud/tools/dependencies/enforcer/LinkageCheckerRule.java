@@ -41,14 +41,15 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.file.NoSuchFileException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +113,8 @@ public class LinkageCheckerRule extends AbstractEnforcerRule {
   private boolean reportOnlyReachable = false;
 
   private String exclusionFile = null;
+  
+  private String baselineFile = null;
 
   private ClassPathBuilder classPathBuilder;
 
@@ -159,6 +162,16 @@ public class LinkageCheckerRule extends AbstractEnforcerRule {
   public void execute() throws EnforcerRuleException {
 	  RepositorySystemSession repositorySystemSession = session.getRepositorySession();
 	
+	  Path baselineFile = this.baselineFile == null ? null : Path.of(this.baselineFile); 
+	  if(baselineFile != null) {
+		  try(BufferedWriter out = Files.newBufferedWriter(baselineFile, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+			  out.write("<!-- " + project.getId() + " -->");
+			  out.newLine();
+	      } catch (IOException e) {
+			e.printStackTrace();
+		  }
+	  }
+	  
 	  ImmutableList<String> repositoryUrls =
 	      project.getRemoteProjectRepositories().stream()
 	          .map(RemoteRepository::getUrl)
@@ -218,7 +231,7 @@ public class LinkageCheckerRule extends AbstractEnforcerRule {
 	
 	    Path exclusionFile = this.exclusionFile == null ? null : Paths.get(this.exclusionFile);
 	    LinkageChecker linkageChecker =
-	        LinkageChecker.create(classPath, entryPoints, exclusionFile);
+	        LinkageChecker.create(classPath, entryPoints, exclusionFile, baselineFile);
 	    ImmutableSet<LinkageProblem> linkageProblems = linkageChecker.findLinkageProblems();
 	    if (reportOnlyReachable) {
 	      ClassReferenceGraph classReferenceGraph = linkageChecker.getClassReferenceGraph();
@@ -229,7 +242,7 @@ public class LinkageCheckerRule extends AbstractEnforcerRule {
 	                      classReferenceGraph.isReachable(entry.getSourceClass().getBinaryName()))
 	              .collect(toImmutableSet());
 	    }
-	
+	    
 	    if (classPathResult != null) {
 	      LinkageProblemCauseAnnotator.annotate(classPathBuilder, classPathResult, linkageProblems);
 	    }
