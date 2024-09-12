@@ -25,7 +25,7 @@ Instructions to create a baseline:
               <configuration>
                 <rules>
                   <linkageCheckerRule>
-                    <baselineFile>baseline.xml</baselineFile>
+                    <baselineFile>baseline.xml</baselineFile> <!-- remove this line once created! -->
                     <exclusionFile>linkagechecker-exclusions.xml</exclusionFile>
                     <reportOnlyReachable>true</reportOnlyReachable>
                   </linkageCheckerRule>
